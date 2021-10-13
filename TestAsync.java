@@ -3,6 +3,7 @@ package zheng.async;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author zheng
@@ -11,7 +12,9 @@ public class TestAsync {
     public static void main(String[] args) {
         System.out.println("这里是ab并行完之后C再运行");
         Async async = new Async();
-
+        AtomicInteger data = new AtomicInteger(0);
+//        boolean b = data.compareAndSet(1, 2);
+        CountDownLatch latch = new CountDownLatch(1);
         Wrapper order = async.newWrapper(new IWorker() {
             @Override
             public <T> T defaultValue() {
@@ -19,7 +22,7 @@ public class TestAsync {
             }
 
             @Override
-            public Order work(Object param) {
+            public Order work() {
                 try {
                     Thread.sleep(1000);
                 } catch (InterruptedException e) {
@@ -40,14 +43,14 @@ public class TestAsync {
             }
 
             @Override
-            public User work(Object param) {
+            public User work() {
                 try {
                     Thread.sleep(1000);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-                throw new NullPointerException("don have it");
-//                return new User("here is jack");
+//                throw new NullPointerException("don have it");
+                return new User("here is jack");
             }
         }, new Listener() {
             @Override
@@ -58,11 +61,9 @@ public class TestAsync {
         Group group = new Group();
         group.addWrapper(wrapper);
         group.addWrapper(order);
-        CountDownLatch latch = new CountDownLatch(1);
-//        Tem tem = new Tem((Order) order.getResult(),(User) wrapper.getResult());
         Wrapper next = async.newWrapper(new IWorker() {
             @Override
-            public <T> T work(Object param) {
+            public <T> T work() {
                 System.out.println("here is process param "+group.getByWrapper(wrapper));
                 System.out.println("here is  another process param "+group.getByWrapper(order));
 
@@ -76,18 +77,24 @@ public class TestAsync {
         }, new Listener() {
             @Override
             public void listen(Object object) {
-
+                latch.countDown();
             }
         });
+
 //        next.setParam(tem);
         group.setNext(next);
 //        async.asynRun(group);
-        group.runWithTimeOut(2610l, TimeUnit.MILLISECONDS);
+        group.runWithTimeOut(1221l, TimeUnit.MILLISECONDS);
         while (true){
-            if (group.getState() > 0){
+            if (group.checkDone() ){
                 break;
             }
         }
+//        try {
+//            latch.await();
+//        } catch (InterruptedException e) {
+//            e.printStackTrace();
+//        }
         System.out.println("here is finish process ");
     }
 

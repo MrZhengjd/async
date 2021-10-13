@@ -16,6 +16,15 @@ public class Wrapper {
     public boolean checkIsNullResult() {
         return ResultState.DEFAULT == result.getResultState();
     }
+    public boolean checkDone(){
+        if (getState() != 1){
+            return false;
+        }
+        if (next != null){
+            return next.checkDone();
+        }
+        return true;
+    }
     public WorkResult getResult() {
         return result;
     }
@@ -93,45 +102,56 @@ public class Wrapper {
         state.set(2);
     }
     public void doWork(){
-        state.compareAndSet(0,3);
+
         Wrapper wrapper = this;
 
         MyExecutor.executor.execute(new Runnable() {
             @Override
             public void run() {
                 try {
-                    Object work = worker.work(param);
-                    if (group != null && group.getState() == 2){
-                        throw new NullPointerException("some one have problems and roke back");
-                    }
-                    result = new WorkResult(work,ResultState.SUCCESS);
-
-                    listener.listen(result);
-
-                    if (next != null){
-                        next.doWork();
-                    }else {
-
-//
+                    while (state.compareAndSet(0,3)){
+                        Object work = worker.work();
+                        if (group != null && group.getState() == 2){
+                            throw new NullPointerException("some one have problems and roke back");
+                        }
+                        /**
+                         * 如果刚好在这个时候超时了(在执行listener的时候阻塞了，然后超时了)
+                         * 应该让他执行完全过程，所以在执行之前就设置为finish
+                         */
+                        result = new WorkResult(work,ResultState.SUCCESS);
+                        listener.listen(result);
                         state.compareAndSet(3,1);
-                        if (group != null){
+//                        System.out.println("finish job -----------");
+
+                        if (next != null){
+                            next.doWork();
+                        }else {
+
+                            if (group != null){
 //
-                            group.put(wrapper,result);
-                            Integer finishCount = group.incrementAndGet();
-                            if (finishCount >= group.getWrapperCount()){
-                                group.setSuccess();
-                                if (group.getGroupListener() != null){
-                                    group.getGroupListener().groupCall(group);
-                                }
-                                if (group.getNext() != null){
-                                    group.getNext().runGroup();
+                                group.put(wrapper,result);
+                                Integer finishCount = group.incrementAndGet();
+                                if (finishCount >= group.getWrapperCount()){
+                                    boolean b = group.setSuccess();
+                                    if (b){
+                                        if (group.getGroupListener() != null){
+                                            group.getGroupListener().groupCall(group);
+                                        }
+                                        if (group.getNext() != null){
+                                            group.getNext().runGroup();
+                                        }
+                                    }
+
                                 }
                             }
-                        }
 
+                        }
                     }
+
+
                 }catch (Exception e){
                     state.set(2);
+                    System.out.println("here is a exception");
                     if (group != null){
                         group.fastFail();
                     }

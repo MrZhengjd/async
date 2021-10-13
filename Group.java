@@ -55,19 +55,74 @@ public class Group {
         this.wrapperCount = wrapperCount;
     }
 
-//    public void setDatas(List<Object> datas) {
-//        this.datas = datas;
-//    }
-
     public void addWrapper(Wrapper wrapper){
         wrappers.add(wrapper);
         wrapper.setGroup(this);
     }
-    public void setSuccess(){
-        state.compareAndSet(0,1);
+
+    /**
+     * 当前组完成了操作后的修改操作
+     */
+    public boolean setSuccess(){
+//        System.out.println("set suceess -----------");
+        return state.compareAndSet(0,1);
     }
+
+    /**
+     * 判断是否全部都完成了，如果有next接着判断next的
+     * @return
+     */
+    public boolean checkDone(){
+        if (state.get() != 0){
+            if (next != null){
+                return next.checkDone();
+            }
+            return true;
+        }
+
+        return false;
+    }
+    public boolean checkAllDone(){
+        boolean isAllDone = true;
+        for (Wrapper wrapper : wrappers){
+            if (!wrapper.checkDone()){
+                isAllDone = false;
+                break;
+            }
+        }
+        return isAllDone;
+    }
+    /**
+     * 快速失败操作
+     */
     public void fastFail(){
-        state.compareAndSet(0,2);
+        System.out.println("set failed ------------");
+        boolean isAllDone = checkAllDone();
+        if (isAllDone){
+            System.out.println("is all done --------");
+            return;
+        }
+        int count = 1;
+        boolean s = state.compareAndSet(0, 2);
+//        System.out.println("here is set failed -----------------");
+        if (!s){
+            for (int i = 0;i< count ;i++){
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                if (state.get() == 1){
+                    return;
+                }
+                isAllDone = checkAllDone();
+                if (isAllDone){
+                    return;
+                }
+            }
+        }
+//        System.out.println("here is coming "+state.get());
+//        state.set(2);
         for (Wrapper wrapper : wrappers){
             wrapper.setException();
             if (wrapper.checkIsNullResult()){
@@ -77,23 +132,43 @@ public class Group {
         }
 //        System.out.println("here is fast fail coming");
     }
+
+    /**
+     * 超时操作，如果超时就快速失败
+     * 快速失败不是用future的get方法
+     * 而是添加一个线程，多久之后去检测是否完成了操作，完成了就不处理
+     * 没完成了就快速失败
+     * @param delay
+     * @param timeUnit
+     */
     public void runWithTimeOut(Long delay, TimeUnit timeUnit){
         runGroup();
         MyExecutor.executorService.schedule(new Runnable() {
             @Override
             public void run() {
                 if (state.get() != 1){
+//                    System.out.println("call fast failed----------------");
                     fastFail();
 
                 }
             }
         },delay,timeUnit);
     }
+
+    /**
+     * 获取当前组内运行状态
+     * @return
+     */
     public int getState(){
         return state.get();
     }
+
+    /**
+     * 运行组内的所有Wrapper对象
+     */
     public void runGroup(){
         wrapperCount = wrappers.size();
+//        System.out.println("wrpper count "+wrapperCount);
 //        datas.clear();
         for (Wrapper wrapper : wrappers){
             wrapper.doWork();
@@ -117,6 +192,11 @@ public class Group {
         next.generateWrapper(wrapper);
         setNext(next);
     }
+
+    /**
+     * 为wrapper生成一个新的group
+     * @param wrapper
+     */
     public void generateWrapper(Wrapper wrapper){
 
         Long id = groupId.getAndIncrement();
