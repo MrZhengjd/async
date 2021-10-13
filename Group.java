@@ -75,7 +75,7 @@ public class Group {
 //                wrapper.getListener().listen(wrapper.getResult());
             }
         }
-        System.out.println("here is fast fail coming");
+//        System.out.println("here is fast fail coming");
     }
     public void runWithTimeOut(Long delay, TimeUnit timeUnit){
         runGroup();

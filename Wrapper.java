@@ -132,6 +132,9 @@ public class Wrapper {
                     }
                 }catch (Exception e){
                     state.set(2);
+                    if (group != null){
+                        group.fastFail();
+                    }
                     result = new WorkResult<>(null,ResultState.EXCEPTION);
                 }
 
